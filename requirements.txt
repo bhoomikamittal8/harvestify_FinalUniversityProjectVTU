@@ -1,0 +1,9 @@
+numpy
+pandas
+Flask
+scikit-learn
+conda install pytorch==1.7.0 torchvision==0.8.0 torchaudio==0.7.0 -c pytorch
+pip install torchvision==0.8.1
+requests
+Pillow
+gunicorn == 20.0.4
