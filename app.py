@@ -1,6 +1,6 @@
 # Importing essential libraries and modules
 
-from flask import Flask, render_template, request, Markup
+from flask import Flask, render_template, request, Markup, url_for, redirect
 import numpy as np
 import pandas as pd
 from utils.disease import disease_dic
@@ -13,6 +13,12 @@ import torch
 from torchvision import transforms
 from PIL import Image
 from utils.model import ResNet9
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import InputRequired, Length, ValidationError
+from flask_bcrypt import Bcrypt
 # ==============================================================================================
 
 # -------------------------LOADING THE TRAINED MODELS -----------------------------------------------
@@ -127,19 +133,108 @@ def predict_image(img, model=disease_model):
 
 
 app = Flask(__name__)
+db = SQLAlchemy(app)
+bcrypt = Bcrypt(app)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SECRET_KEY'] = 'thisisasecretkey'
+ 
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(20), nullable=False, unique=True)
+    password = db.Column(db.String(80), nullable=False)
+
+
+class RegisterForm(FlaskForm):
+    username = StringField(validators=[
+                           InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "Username"})
+
+    password = PasswordField(validators=[
+                             InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
+
+    submit = SubmitField('Register')
+
+    def validate_username(self, username):
+        existing_user_username = User.query.filter_by(
+            username=username.data).first()
+        if existing_user_username:
+            raise ValidationError(
+                'That username already exists. Please choose a different one.')
+
+
+class LoginForm(FlaskForm):
+    username = StringField(validators=[
+                           InputRequired(), Length(min=4, max=20)], render_kw={"placeholder": "Username"})
+
+    password = PasswordField(validators=[
+                             InputRequired(), Length(min=8, max=20)], render_kw={"placeholder": "Password"})
+
+    submit = SubmitField('Login')
+
+    def validate_username(self, username):
+        user = User.query.filter_by(username=username.data).first()
+        if not user:
+            raise ValidationError('Invalid username or password.')
+
+@ app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm()
+
+    if form.validate_on_submit():
+        hashed_password = bcrypt.generate_password_hash(form.password.data)
+        new_user = User(username=form.username.data, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for('login'))
+
+    return render_template('sign_up.html', form=form)
+
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(username=form.username.data).first()
+        if user:
+            if bcrypt.check_password_hash(user.password, form.password.data):
+                login_user(user)
+                return redirect(url_for('home'))
+    return render_template('login.html', form=form)
+
+@app.route("/logout")
+def logout():
+    logout_user()
+    return redirect(url_for("home"))
+
 
 # render home page
-
-
-@ app.route('/')
+@app.route('/', methods=['GET', 'POST'])
+def landing_page():
+    form = LoginForm()  # Assuming LoginForm is imported and defined
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    else:
+        return render_template('login.html', form=form)
+#--------------------#--------------------#--------------------#--------------------#
+@app.route('/dashboard')
+@login_required
 def home():
     title = 'Harvestify - Home'
     return render_template('index.html', title=title)
+#--------------------#--------------------#--------------------#--------------------#
+
 
 # render crop recommendation form page
 
 
 @ app.route('/crop-recommend')
+@login_required
 def crop_recommend():
     title = 'Harvestify - Crop Recommendation'
     return render_template('crop.html', title=title)
@@ -148,6 +243,7 @@ def crop_recommend():
 
 
 @ app.route('/fertilizer')
+@login_required
 def fertilizer_recommendation():
     title = 'Harvestify - Fertilizer Suggestion'
 
@@ -166,6 +262,7 @@ def fertilizer_recommendation():
 
 
 @ app.route('/crop-predict', methods=['POST'])
+@login_required
 def crop_prediction():
     title = 'Harvestify - Crop Recommendation'
 
@@ -195,6 +292,7 @@ def crop_prediction():
 
 
 @ app.route('/fertilizer-predict', methods=['POST'])
+@login_required
 def fert_recommend():
     title = 'Harvestify - Fertilizer Suggestion'
 
@@ -239,6 +337,7 @@ def fert_recommend():
 
 
 @app.route('/disease-predict', methods=['GET', 'POST'])
+@login_required
 def disease_prediction():
     title = 'Harvestify - Disease Detection'
 
@@ -262,4 +361,4 @@ def disease_prediction():
 
 # ===============================================================================================
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)
