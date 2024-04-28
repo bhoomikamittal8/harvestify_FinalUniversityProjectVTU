@@ -1,28 +1,36 @@
+# ===================================================================================================
 # Importing essential libraries and modules
 
-from flask import Flask, render_template, request, Markup, url_for, redirect
 import numpy as np
 import pandas as pd
-from utils.disease import disease_dic
-from utils.fertilizer import fertilizer_dic
-import requests
-import config
-import pickle
 import re
 import io
-import torch
-from torchvision import transforms
-from PIL import Image
-from utils.model import ResNet9
+
+from flask import Flask, render_template, request, Markup, url_for, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
+from flask_bcrypt import Bcrypt
+
+
+import requests
+import config
+import pickle
+import torch
+from torchvision import transforms
+from PIL import Image
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import InputRequired, Length, ValidationError
-from flask_bcrypt import Bcrypt
-# ==============================================================================================
 
-# -------------------------LOADING THE TRAINED MODELS -----------------------------------------------
+
+# /utils/*. contains dictionaries and models used in the app
+from utils.disease import disease_dic
+from utils.fertilizer import fertilizer_dic
+from utils.model import ResNet9
+
+# ===================================================================================================
+
+# ----------------------------------LOADING THE TRAINED MODELS --------------------------------------
 
 # Loading plant disease classification model
 
@@ -129,8 +137,9 @@ def predict_image(img, model=disease_model):
     # Retrieve the class label
     return prediction
 
-# ===============================================================================================
-# ------------------------------------ FLASK APP -------------------------------------------------
+
+# ================================================================================================
+# ----------------------------------------- FLASK APP --------------------------------------------
 
 
 app = Flask(__name__)
@@ -183,6 +192,8 @@ class LoginForm(FlaskForm):
         user = User.query.filter_by(username=username.data).first()
         if not user:
             raise ValidationError('Invalid username or password.')
+        
+# ====================================================================================================
 
 @ app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -213,8 +224,9 @@ def logout():
     logout_user()
     return redirect(url_for("home"))
 
+# ===============================================================================================
 
-# render home page
+# RENDER HOME PAGE - Login Page
 @app.route('/', methods=['GET', 'POST'])
 def landing_page():
     form = LoginForm()  # Assuming LoginForm is imported and defined
@@ -222,18 +234,17 @@ def landing_page():
         return redirect(url_for('home'))
     else:
         return render_template('login.html', form=form)
-#--------------------#--------------------#--------------------#--------------------#
+    
+
+# RENDER DASHBOARD PAGE - Home Page
 @app.route('/dashboard')
 @login_required
 def home():
     title = 'Harvestify - Home'
     return render_template('index.html', title=title)
-#--------------------#--------------------#--------------------#--------------------#
 
 
 # render crop recommendation form page
-
-
 @ app.route('/crop-recommend')
 @login_required
 def crop_recommend():
@@ -241,8 +252,6 @@ def crop_recommend():
     return render_template('crop.html', title=title)
 
 # render fertilizer recommendation form page
-
-
 @ app.route('/fertilizer')
 @login_required
 def fertilizer_recommendation():
@@ -250,18 +259,18 @@ def fertilizer_recommendation():
 
     return render_template('fertilizer.html', title=title)
 
+
 # render disease prediction input page
+         # written below in result page (@app.route('/disease-predict', methods=['GET', 'POST']))
 
 
 
 
-# ===============================================================================================
+# ====================================================================================================
+# ------------------------------------ RENDER PREDICTION PAGES ---------------------------------------
 
-# RENDER PREDICTION PAGES
 
 # render crop recommendation result page
-
-
 @ app.route('/crop-predict', methods=['POST'])
 @login_required
 def crop_prediction():
@@ -289,9 +298,8 @@ def crop_prediction():
 
             return render_template('try_again.html', title=title)
 
+
 # render fertilizer recommendation result page
-
-
 @ app.route('/fertilizer-predict', methods=['POST'])
 @login_required
 def fert_recommend():
@@ -334,9 +342,9 @@ def fert_recommend():
 
     return render_template('fertilizer-result.html', recommendation=response, title=title)
 
+
+
 # render disease prediction result page
-
-
 @app.route('/disease-predict', methods=['GET', 'POST'])
 @login_required
 def disease_prediction():
@@ -360,6 +368,6 @@ def disease_prediction():
     return render_template('disease.html', title=title)
 
 
-# ===============================================================================================
+# ==================================================================================================
 if __name__ == '__main__':
     app.run(debug=True)
